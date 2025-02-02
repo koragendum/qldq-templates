@@ -1,27 +1,59 @@
 from lexer import Token
 
-INFINITY = 1024
+KEYWORDS = [
+]
 
-# A parser is a lambda that takes a list of tokens and returns a tuple (remaining, parse tree)
-#   or a ParseFailure.
-# A parse tree is a list of the form [label, subtree, subtree, ...].
+OPERATORS = [
+]
+
+#~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
+class ParseTree:
+    def __init__(self, label, children):
+        self.label = label
+        self.children = children
+
+    def __repr__(self):
+        tr = "\x1B[38;5;129mTree\x1B[39m"
+        return f"{tr} {self.label}"
+
+    def __len__(self):
+        return len(self.children)
+
+    def __iter__(self):
+        return iter(self.children)
+
+    def __getitem__(self, x):
+        return self.children[x]
+
+    def show(self, indent=0):
+        margin = "\x1B[2m\u2502\x1B[22m "
+        print(margin*indent, end='')
+        print(self)
+        for child in self.children:
+            if isinstance(child, Token):
+                print(margin*(indent+1), end='')
+                print(child)
+            else:
+                child.show(indent+1)
+
 
 def extract_tokens(obj):
     if isinstance(obj, Token):
         return [obj]
-    out = []
-    for x in obj[1:]:
-        out += extract_tokens(x)
-    return out
+    if isinstance(obj, ParseTree):
+        return sum((extract_tokens(x) for x in obj.children), [])
+    raise RuntimeError(f"unable to extract tokens from {type(obj)}")
+
 
 class ParseFailure:
-    def __init__(self, msg, label, hi):
+    def __init__(self, msg, hi):
         """
         msg -- string describing the failure
-        hi  -- parse tree
+        hi  -- token or parse tree
         """
         self.message = msg
-        self.labels = [label]
+        self.labels = []
         self.highlight = hi
 
     def __repr__(self):
@@ -61,73 +93,65 @@ class ParseFailure:
         print("\x1B[39m", end='')
         print()
 
-def Seq(*parsers, label=None):
-    def composition(tokens):
-        remaining = tokens
-        tree = [label]
-        for p in parsers:
-            result = p(remaining)
-            if isinstance(result, ParseFailure):
-                result.mark(label)
-                return result
-            remaining, subtree = result
-            if subtree[0] is None:
-                tree += subtree[1:]
-            else:
-                tree.append(subtree)
-        return (remaining, tree)
 
-    return composition
+def _parse_interior(container, seq):
+    """
+    seq -- a list of tokens and ParseTrees guaranteed to not include any delimiters
+    """
+    return [ParseTree(container, seq)]
 
-def Rep(parser, minim: 0, maxim: INFINITY, label: None):
-    pass
 
-def Opt(*parsers, label: None):
-    pass
+def parse(seq):
+    left_delims  = ('(', '[', '{')
+    right_delims = (')', ']', '}')
+    delims = ('(', ')', '[', ']', '{', '}')
+    dual   = {'(': ')', '[': ']', '{': '}'}
+    d_name = {')': 'parentheses', ']': 'brackets', '}': 'braces'}
 
-def Literal(kind, value, label=None):
-    def matcher(tokens):
-        if len(tokens) == 0:
-            return ParseFailure(f"unexpectedly reached end of text", label, None)
-        tok = tokens[0]
 
-        if isinstance(kind, str):
-            kind_match = tok.kind == kind
-        elif isinstance(kind, tuple) or isinstance(kind, list):
-            kind_match = tok.kind in kind
-        else:
-            kind_match = True
+    # Handle delimiters (parentheses, brackets, and braces)
+    stack = []
+    index = 0
+    while True:
+        if index >= len(seq):
+            break
 
-        if isinstance(value, str):
-            value_match = tok.value == value
-        elif isinstance(value, tuple) or isinstance(value, list):
-            value_match = tok.value in value
-        else:
-            value_match = True
+        token = seq[index]
+        if token.kind != 'symbol' or token.value not in delims:
+            index += 1
+            continue
 
-        tree = [label, tok]
-        if kind_match and value_match:
-            return (tokens[1:], tree)
-        else:
-            if not kind_match:
-                if isinstance(kind, tuple) or isinstance(kind, list):
-                    msg = f"expected one of {kind}"
-                else:
-                    msg = f"expected {kind}"
-            if not value_match:
-                if isinstance(value, tuple) or isinstance(value, list):
-                    msg = f"expected one of {value}"
-                else:
-                    msg = f"expected {value}"
-            return ParseFailure(msg, label, tree)
+        if token.value in left_delims:
+            stack.append((index, dual[token.value]))
+            index += 1
+            continue
 
-    return matcher
+        if len(stack) == 0:
+            return ParseFailure('missing left delimiter', token)
 
-def Symbol(value, label=None):
-    return Literal('symbol', value, label)
+        left_index, expected_delim = stack[-1]
+        if token.value != expected_delim:
+            return ParseFailure('missing left delimiter', token)
 
-def Keyword(value, label=None):
-    return Literal('word', value, label)
+        interior = seq[left_index+1:index]
+        inter_length = len(interior)
+
+        replacement = _parse_interior(d_name[token.value], interior)
+        repl_length = len(replacement)
+
+        seq = seq[:left_index] + replacement + seq[index+1:]
+        index = index - 1 - (inter_length - repl_length) - 1
+
+        stack.pop()
+        index += 1
+
+    if len(stack) > 0:
+        left_index, _ = stack[-1]
+        return ParseFailure('missing right delimiter', seq[left_index])
+
+    # Parse the delimiter-free sequence
+    return _parse_interior('root', seq)
+
 
 #~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -144,13 +168,13 @@ if __name__ == '__main__':
             exit()
         return line + "\n"
 
-    parser = Seq(Symbol('('), Seq(Symbol('*', label='sym')), Symbol(')'), label='test')
     stream = TokenStream("", prompt)
 
     while True:
-        result = parser(stream.readline())
+        result = parse(stream.readline())
         if isinstance(result, ParseFailure):
-            result.show(stream.log.split('\n'))
+            log_lines = stream.log.split('\n')
+            result.show(log_lines)
         else:
-            remaining, tokens = result
-            print(tokens)
+            for obj in result:
+                obj.show()

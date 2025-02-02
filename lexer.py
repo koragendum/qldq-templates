@@ -59,7 +59,8 @@ class Token:
             value = "_"
         else:
             value = repr(self.value)
-        return f"<{tk} {value} : {self.kind} @ {self.line},{self.column}>"
+        return f"{tk} {value} : {self.kind} @ {self.line},{self.column}"
+
 
 class TokenStream:
     def __init__(self, text, more = None):
@@ -205,6 +206,7 @@ class TokenStream:
             if tok.kind == 'newline':
                 return buf
             buf.append(tok)
+
 
 class TokenBuffer:
     def __init__(self, stream, more = None):
