@@ -3,7 +3,29 @@ from lexer import Token
 KEYWORDS = [
 ]
 
+# Arranged from high to low precedence. Unary operators are 'prefix' or 'postfix', and binary
+#   operators are 'left' or 'right' associative.
 OPERATORS = [
+    ('left',    [('.',   'dot2' ),                                                 ]),
+    ('prefix',  [('+',   'plus1'), ('-',  'minus1'), ('!', 'not1'),                ]),
+    ('postfix', [('?',   'opt1' ),                                                 ]),
+    ('left',    [(None,  'appl2'),                                                 ]),
+    ('right',   [('^',   'expo2'),                                                 ]),
+    ('left',    [('*',   'mul2' ), ('/',  'div2'  ), ('%', 'mod2'),                ]),
+    ('left',    [('+',   'plus2'), ('-',  'minus2'),                               ]),
+    ('left',    [('&',   'and2' ),                                                 ]),
+    ('left',    [('|',   'or2'  ), ('~',  'xor2'  ),                               ]),
+    ('right',   [('++',  'cat2' ), ('::', 'cons2' ),                               ]),
+    ('left',    [('>=',  'geq2' ), ('<=', 'leq2'  ), ('>',  'gt2' ), ('<', 'lt2'), ]),
+    ('left',    [('=',   'eq2'  ), ('==', 'deq2'  ), ('!=', 'neq2'),               ]),
+    ('right',   [('&&',  'land2'),                                                 ]),
+    ('right',   [('||',  'lor2' ),                                                 ]),
+    ('right',   [('$',   'seq2' ),                                                 ]),
+    ('left',    [(':',   'typ2' ),                                                 ]),
+    ('right',   [(':=',  'def2' ),                                                 ]),
+    ('right',   [('<-',  'assn2'),                                                 ]),
+    ('left',    [(',',   'com2' ),                                                 ]),
+    ('left',    [(';',   'sem2' ),                                                 ]),
 ]
 
 #~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
@@ -94,7 +116,15 @@ class ParseFailure:
         print()
 
 
-def _parse_interior(container, seq):
+def adjacent(tok1, tok2):
+    return tok2.line == tok1.line and abs(tok2.column - tok1.column) == 1
+
+
+def parse_operators(seq, min_precedence):
+    pass
+
+
+def parse_interior(container, seq):
     """
     seq -- a list of tokens and ParseTrees guaranteed to not include any delimiters
     """
@@ -127,16 +157,16 @@ def parse(seq):
             continue
 
         if len(stack) == 0:
-            return ParseFailure('missing left delimiter', token)
+            return ParseFailure('unpaired delimiter', token)
 
         left_index, expected_delim = stack[-1]
         if token.value != expected_delim:
-            return ParseFailure('mismatched or missing left delimiter', token)
+            return ParseFailure('mismatched or unpaired delimiter', token)
 
         interior = seq[left_index+1:index]
         inter_length = len(interior)
 
-        replacement = _parse_interior(d_name[token.value], interior)
+        replacement = parse_interior(d_name[token.value], interior)
         repl_length = len(replacement)
 
         seq = seq[:left_index] + replacement + seq[index+1:]
@@ -147,10 +177,10 @@ def parse(seq):
 
     if len(stack) > 0:
         left_index, _ = stack[-1]
-        return ParseFailure('missing right delimiter', seq[left_index])
+        return ParseFailure('unpaired delimiter', seq[left_index])
 
     # Parse the delimiter-free sequence
-    return _parse_interior('root', seq)
+    return parse_interior('root', seq)
 
 
 #~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
