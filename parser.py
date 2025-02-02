@@ -70,7 +70,7 @@ class ParseTree:
         self.label = label
         self.children = children
 
-    def __repr__(self):
+    def __str__(self):
         tr = "\x1B[38;5;129mTree\x1B[39m"
         return f"{tr} {self.label}"
 
@@ -83,16 +83,23 @@ class ParseTree:
     def __getitem__(self, x):
         return self.children[x]
 
-    def show(self, indent=0):
-        margin = "\x1B[2m\u2502\x1B[22m "
-        print(margin*indent, end='')
-        print(self)
-        for child in self.children:
+    def show(self, top=True):
+        lines = [str(self)]
+        num_children = len(self.children)
+        for idx, child in enumerate(self.children):
+            last = (idx + 1 == num_children)
+            mark = "\u2514" if last else "\u251C"
+            mark = f"\x1B[2m{mark}\u2500\x1B[22m "
             if isinstance(child, Token):
-                print(margin*(indent+1), end='')
-                print(child)
+                lines.append(mark + str(child))
             else:
-                child.show(indent+1)
+                block = child.show(top=False)
+                lines.append(mark + block[0])
+                margin = "   " if last else "\x1B[2m\u2502\x1B[22m  "
+                for ln in block[1:]:
+                    lines.append(margin + ln)
+        if top: print("\n".join(lines))
+        return lines
 
 
 def extract_tokens(obj):
@@ -115,7 +122,7 @@ class ParseFailure:
         self.labels = []
         self.highlight = hi
 
-    def __repr__(self):
+    def __str__(self):
         return f"\x1B[91merror\x1B[39m: {self.message}"
 
     def mark(self, label):

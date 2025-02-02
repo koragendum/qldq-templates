@@ -24,7 +24,7 @@ ws_regex = re.compile(f"\\s+")
 grp_sepr = re.escape(GRP_SEPR)
 radix_pt = re.escape(RADIX_PT)
 if RADIX_PT:
-    num_regex = re.compile(f"\\d+({grp_sepr}\\d+)*({radix_pt}\d+({grp_sepr}\\d+)*)?")
+    num_regex = re.compile(f"\\d+({grp_sepr}\\d+)*({radix_pt}\\d+({grp_sepr}\\d+)*)?")
 else:
     num_regex = re.compile(f"\\d+({grp_sepr}\\d+)*")
 
@@ -34,7 +34,7 @@ def bracket_escape(chars):
     if esc[0] == '^': esc[0] = '\\^'
     return esc
 
-word = '[^\s' + ''.join(bracket_escape(NON_WORD+[COMMENT,STR_DELIM])) + ']'
+word = '[^\\s' + ''.join(bracket_escape(NON_WORD+[COMMENT,STR_DELIM])) + ']'
 mid_word = '[' + ''.join(bracket_escape(MID_WORD)) + ']'
 end_word = '(' + '|'.join(re.escape(char)+'+' for char in END_WORD) + ')'
 
@@ -53,7 +53,7 @@ class Token:
         self.line   = line
         self.column = column
 
-    def __repr__(self):
+    def __str__(self):
         tk = "\x1B[38;5;42mToken\x1B[39m"
         if self.value is None:
             return f"{tk} : {self.kind} @ {self.line},{self.column}"
@@ -226,27 +226,25 @@ class TokenBuffer:
     def __len__(self):
         if self.is_complete:
             return len(self.buffer)
-        else:
-            raise Exception("length unknown because buffer has not been completed")
+        raise Exception("length unknown because buffer has not been completed")
 
     def __getitem__(self, idx):
         if self.is_complete:
             return self.buffer[idx]
-        else:
-            if idx < 0:
-                raise IndexError("length unknown because buffer has not been completed")
-            if idx >= len(self.buffer):
-                for _ in range(idx - len(self.buffer) + 1):
-                    tok = next(self.stream)
-                    if tok is None:
-                        self.is_complete = True
-                        break
-                    self.buffer.append(tok)
-            return self.buffer[idx]
+        if idx < 0:
+            raise IndexError("length unknown because buffer has not been completed")
+        if idx >= len(self.buffer):
+            for _ in range(idx - len(self.buffer) + 1):
+                tok = next(self.stream)
+                if tok is None:
+                    self.is_complete = True
+                    break
+                self.buffer.append(tok)
+        return self.buffer[idx]
 
     def complete(self):
         if self.stream.more is not None:
-            raise Exception("cannot complete buffer while self.stream.more is not None")
+            raise Exception("cannot complete buffer")
         while (tok := next(self.stream)) is not None:
             self.buffer.append(tok)
         self.is_complete = True
