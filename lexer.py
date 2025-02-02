@@ -62,9 +62,11 @@ class Token:
         return f"({tk} {value} : {self.kind} @ {self.line},{self.column})"
 
 class TokenStream:
-    # text  text to be tokenized
-    # more  nullary function that will be called to get more text
     def __init__(self, text, more = None):
+        """
+        text -- text to be tokenized
+        more -- nullary function that will be called to get more text
+        """
         self.text   = text
         self.more   = more
         self.line   = 1
@@ -187,10 +189,22 @@ class TokenStream:
 
             raise Exception(f"unknown lexing error @ {tok_line}, {tok_column}")
 
+    def readline(self):
+        buf = []
+        while True:
+            tok = next(self)
+            if tok is None:
+                return None if len(buf) == 0 else buf
+            if tok.kind == 'newline':
+                return buf
+            buf.append
+
 class TokenBuffer:
-    # stream    text or instance of TokenStream
-    # more      nullary function that will be called to get more text
     def __init__(self, stream, more = None):
+        """
+        stream -- text or instance of TokenStream
+        more   -- nullary function that will be called to get more text
+        """
         if isinstance(stream, str):
             self.stream = TokenStream(stream, more)
         else:
