@@ -1,6 +1,6 @@
 EMIT_NEWLINES = True
 
-# These must all be single characters with the exception of COMMENT, which may be sequences.
+# These must all be single characters with the exception of COMMENT, which may be a sequence.
 #   If RADIX_PT is set to "" or None, only integers will be matched.
 COMMENT   = '#'
 STR_DELIM = '"'
