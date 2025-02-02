@@ -56,9 +56,8 @@ class Token:
     def __repr__(self):
         tk = "\x1B[38;5;42mToken\x1B[39m"
         if self.value is None:
-            value = "_"
-        else:
-            value = repr(self.value)
+            return f"{tk} : {self.kind} @ {self.line},{self.column}"
+        value = repr(self.value) if self.kind == 'string' else self.value
         return f"{tk} {value} : {self.kind} @ {self.line},{self.column}"
 
 
