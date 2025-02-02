@@ -1,16 +1,15 @@
 from lexer import Token
 
-KEYWORDS = [
-]
-
 # Arranged from high to low precedence. Unary operators are 'prefix' or 'postfix', and binary
 #   operators are 'left' or 'right' associative.
+# The None operator is function application; otherwise, operators must be one or two characters
+#   long (but not longer).
 OPERATORS = [
     ('left',    [('.',   'dot2' ),                                                 ]),
-    ('prefix',  [('+',   'plus1'), ('-',  'minus1'), ('!', 'not1'),                ]),
     ('postfix', [('?',   'opt1' ),                                                 ]),
     ('left',    [(None,  'appl2'),                                                 ]),
     ('right',   [('^',   'expo2'),                                                 ]),
+    ('prefix',  [('+',   'plus1'), ('-',  'minus1'), ('!', 'not1'),                ]),
     ('left',    [('*',   'mul2' ), ('/',  'div2'  ), ('%', 'mod2'),                ]),
     ('left',    [('+',   'plus2'), ('-',  'minus2'),                               ]),
     ('left',    [('&',   'and2' ),                                                 ]),
@@ -27,6 +26,42 @@ OPERATORS = [
     ('left',    [(',',   'com2' ),                                                 ]),
     ('left',    [(';',   'sem2' ),                                                 ]),
 ]
+
+#~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
+singlechar_ops = []     # [str]
+multichar_ops  = []     # [str]
+
+prefix_ops  = {}        # {str -> (precedence : int, name : str)}
+postfix_ops = {}        # {str -> (precedence : int, name : str)}
+binary_ops  = {}        # {str -> (precedence : int, right-assoc : bool, name : str)}
+
+for prec in range(len(OPERATORS)):
+    level = OPERATORS[-1 - prec]
+    if level[0] in ('prefix', 'postfix'):
+        op_dict = (postfix_ops if level[0] == 'postfix' else prefix_ops)
+        for op in level[1]:
+            sym, name = op
+            op_dict[sym] = (prec, name)
+            if sym is None:
+                raise Exception("application must be a binary operator")
+
+    elif level[0] in ('left', 'right'):
+        rassoc = (level[0] == 'right')
+        for op in level[1]:
+            sym, name = op
+            binary_ops[sym] = (prec, rassoc, name)
+    else:
+        raise Exception("associativity should be 'left', 'right', 'prefix', or 'postfix'")
+
+    for op in level[1]:
+        sym, _ = op
+        if sym is None:
+            continue
+        if len(sym) > 1:
+            multichar_ops.append(sym)
+        elif len(sym) > 0:
+            singlechar_ops.append(sym)
 
 #~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
 
@@ -115,31 +150,115 @@ class ParseFailure:
         print("\x1B[39m", end='')
         print()
 
+#~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
+def _parse_operators(seq, min_precedence):
+    """
+    Returns a token or ParseTree.
+    """
+    if len(seq) == 0:
+        return 
+
+    lhs = seq[0]
+    index = 1
+    if isinstance(lhs, Token) and lhs.kind == 'symbol':
+        if lhs.value in prefix_ops:
+            precedence, name = prefix_ops[lhs.value]
+            rhs_parse = _parse_operators(seq[index:], precedence)
+            if isinstance(rhs_parse, ParseFailure):
+                return rhs_parse
+            rhs, num_tokens = rhs_parse
+            index += num_tokens
+            lhs = ParseTree(name, [rhs])
+
+        elif lhs.value in binary_ops:
+            return ParseFailure('binary operator missing left-hand argument', lhs)
+
+    while True:
+        if index >= len(seq):
+            break
+
+        op = seq[index]
+        is_symbol = isinstance(op, Token) and op.kind == 'symbol'
+        if is_symbol and op.value in postfix_ops:
+            precedence, name = postfix_ops[op.value]
+            if precedence < min_precedence:
+                break
+            lhs = ParseTree(name, [lhs])
+            index += 1
+            continue
+
+        elif is_symbol and op.value in binary_ops:
+            precedence, rassoc, name = binary_ops[op.value]
+            if precedence < min_precedence:
+                break
+            index += 1
+            if index >= len(seq):
+                return ParseFailure('binary operator missing right-hand argument', op)
+
+        else:
+            precedence, rassoc, name = binary_ops[None]
+            if precedence < min_precedence:
+                break
+
+        rhs_parse = _parse_operators(seq[index:], precedence + (0 if rassoc else 1))
+        if isinstance(rhs_parse, ParseFailure):
+            return rhs_parse
+        rhs, num_tokens = rhs_parse
+
+        index += num_tokens
+        lhs = ParseTree(name, [lhs, rhs])
+
+    return (lhs, index)
+
+
+def parse_operators(seq):
+    parse = _parse_operators(seq, 0)
+    if isinstance(parse, ParseFailure):
+        return parse
+    return parse[0]
+
+
+def parse_interior(container, seq):
+    """
+    Returns a list of tokens and/or ParseTrees.
+
+    container -- the context in which seq appears ('root', 'parentheses', 'brackets', or 'braces')
+    seq       -- a list of tokens and/or ParseTrees guaranteed to not include any delimiters
+    """
+    op_parse = parse_operators(seq)
+    if isinstance(op_parse, ParseFailure):
+        return op_parse
+    if container == 'brackets' or container == 'braces':
+        return [ParseTree(container, [op_parse])]
+    return [op_parse]
+
 
 def adjacent(tok1, tok2):
     return tok2.line == tok1.line and abs(tok2.column - tok1.column) == 1
 
 
-def parse_operators(seq, min_precedence):
-    pass
-
-
-def parse_interior(container, seq):
-    """
-    seq -- a list of tokens and ParseTrees guaranteed to not include any delimiters
-    """
-    return [ParseTree(container, seq)]
-
-
 def parse(seq):
-    left_delims  = ('(', '[', '{')
-    right_delims = (')', ']', '}')
-    delims = ('(', ')', '[', ']', '{', '}')
-    dual   = {'(': ')', '[': ']', '{': '}'}
-    d_name = {')': 'parentheses', ']': 'brackets', '}': 'braces'}
+    # Join up multicharacter operators
+    if len(multichar_ops) > 0:
+        index = 0
+        while index < len(seq)-1:
+            if (tok1 := seq[index]).kind == 'symbol' and (tok2 := seq[index+1]).kind == 'symbol':
+                if adjacent(tok1, tok2) and (concat := tok1.value + tok2.value) in multichar_ops:
+                    tok = Token(concat, concat, 'symbol', tok1.line, tok1.column)
+                    seq[index] = tok
+                    seq[index+1] = None
+                    index += 1
+            index += 1
 
+        seq = [tok for tok in seq if tok is not None]
 
     # Handle delimiters (parentheses, brackets, and braces)
+    left_delims   = ('(', '[', '{')
+    right_delims  = (')', ']', '}')
+    corresponding = {'(': ')', '[': ']', '{': '}'}
+    delim_name    = {')': 'parentheses', ']': 'brackets', '}': 'braces'}
+
     stack = []
     index = 0
     while True:
@@ -147,12 +266,12 @@ def parse(seq):
             break
 
         token = seq[index]
-        if token.kind != 'symbol' or token.value not in delims:
+        if token.kind != 'symbol' or token.value not in (left_delims+right_delims):
             index += 1
             continue
 
         if token.value in left_delims:
-            stack.append((index, dual[token.value]))
+            stack.append((index, corresponding[token.value]))
             index += 1
             continue
 
@@ -166,7 +285,9 @@ def parse(seq):
         interior = seq[left_index+1:index]
         inter_length = len(interior)
 
-        replacement = parse_interior(d_name[token.value], interior)
+        replacement = parse_interior(delim_name[token.value], interior)
+        if isinstance(replacement, ParseFailure):
+            return replacement
         repl_length = len(replacement)
 
         seq = seq[:left_index] + replacement + seq[index+1:]

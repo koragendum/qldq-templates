@@ -60,6 +60,9 @@ class Token:
         value = repr(self.value) if self.kind == 'string' else self.value
         return f"{tk} {value} : {self.kind} @ {self.line},{self.column}"
 
+    def show(self):
+        print(self)
+
 
 class TokenStream:
     def __init__(self, text, more = None):
