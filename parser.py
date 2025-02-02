@@ -131,7 +131,7 @@ def parse(seq):
 
         left_index, expected_delim = stack[-1]
         if token.value != expected_delim:
-            return ParseFailure('missing left delimiter', token)
+            return ParseFailure('mismatched or missing left delimiter', token)
 
         interior = seq[left_index+1:index]
         inter_length = len(interior)
