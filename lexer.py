@@ -187,7 +187,7 @@ class TokenStream:
                 self.text = self.text[match.end():]
                 return Token(word, word, 'word', tok_line, tok_column)
 
-            raise Exception(f"unknown lexing error @ {tok_line}, {tok_column}")
+            raise Exception(f"unknown lexing error ({tok_line}, {tok_column})")
 
     def readline(self):
         buf = []
