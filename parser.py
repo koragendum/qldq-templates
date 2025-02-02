@@ -100,6 +100,8 @@ def extract_tokens(obj):
         return [obj]
     if isinstance(obj, ParseTree):
         return sum((extract_tokens(x) for x in obj.children), [])
+    if isinstance(obj, (list, tuple)):
+        return sum((extract_tokens(x) for x in obj), [])
     raise RuntimeError(f"unable to extract tokens from {type(obj)}")
 
 
@@ -129,9 +131,9 @@ class ParseFailure:
         tokens = extract_tokens(self.highlight)
         top = tokens[ 0].line - 1
         bot = tokens[-1].line - 1
+        print(f"\x1B[91merror\x1B[39m: line {tokens[0].line}: " + self.message)
         if bot-top > 1:
             return  # not sure yet how to display multi-line errors
-        print(f"\x1B[91merror\x1B[39m: line {tokens[0].line}: " + self.message)
         labels = [x for x in self.labels if x is not None][::-1]
         line = log_lines[top]
         margin = "\x1B[2m\u2502\x1B[22m "
@@ -157,7 +159,7 @@ def _parse_operators(seq, min_precedence):
     Returns a token or ParseTree.
     """
     if len(seq) == 0:
-        return 
+        raise Exception('nothing to parse')
 
     lhs = seq[0]
     index = 1
@@ -226,6 +228,8 @@ def parse_interior(container, seq):
     container -- the context in which seq appears ('root', 'parentheses', 'brackets', or 'braces')
     seq       -- a list of tokens and/or ParseTrees guaranteed to not include any delimiters
     """
+    if len(seq) == 0:
+        return []
     op_parse = parse_operators(seq)
     if isinstance(op_parse, ParseFailure):
         return op_parse
@@ -288,6 +292,8 @@ def parse(seq):
         replacement = parse_interior(delim_name[token.value], interior)
         if isinstance(replacement, ParseFailure):
             return replacement
+        if len(replacement) == 0:
+            return ParseFailure('empty delimited region', (seq[left_index], token))
         repl_length = len(replacement)
 
         seq = seq[:left_index] + replacement + seq[index+1:]
