@@ -59,7 +59,7 @@ class Token:
             value = "_"
         else:
             value = repr(self.value)
-        return f"({tk} {value} : {self.kind} @ {self.line},{self.column})"
+        return f"<{tk} {value} : {self.kind} @ {self.line},{self.column}>"
 
 class TokenStream:
     def __init__(self, text, more = None):
@@ -72,6 +72,7 @@ class TokenStream:
         self.line   = 1
         self.column = 1
         self.just_emitted_newline = False
+        self.log = text
 
     def _advance(self, string):
         newlines = string.count("\n")
@@ -100,7 +101,9 @@ class TokenStream:
             if len(self.text) == 0:
                 if self.more is None:
                     return None
-                self.text += self.more()
+                addendum = self.more()
+                self.text += addendum
+                self.log  += addendum
                 continue
 
             # Is this a comment?
@@ -116,7 +119,9 @@ class TokenStream:
                         self.text = ""
                         if self.more is None:
                             return None
-                        self.text += self.more()
+                        addendum = self.more()
+                        self.text += addendum
+                        self.log  += addendum
                 continue
 
             # At this point, we're guaranteed not to return a newline, so
@@ -147,7 +152,9 @@ class TokenStream:
                     if idx >= len(self.text):
                         if self.more is None:
                             raise Exception(f"unterminated string ({tok_line}, {tok_column})")
-                        self.text += self.more()
+                        addendum = self.more()
+                        self.text += addendum
+                        self.log  += addendum
                         continue
                     char = self.text[idx]
                     if escape:
@@ -197,7 +204,7 @@ class TokenStream:
                 return None if len(buf) == 0 else buf
             if tok.kind == 'newline':
                 return buf
-            buf.append
+            buf.append(tok)
 
 class TokenBuffer:
     def __init__(self, stream, more = None):
