@@ -148,11 +148,11 @@ class ParseFailure:
             print(margin, end='')
             print(f"\x1B[2min {'/'.join(labels)}")
         print(margin)
-        print(margin + line)
-        print(margin, end='')
         left  = tokens[ 0].column - 1
         right = tokens[-1].column - 1 + len(tokens[-1].text)
-
+        l, m, r = line[:left], line[left:right], line[right:]
+        print(margin + f'{l}\x1B[91m{m}\x1B[39m{r}')
+        print(margin, end='')
         print(" "*left, end='')
         print("\x1B[91m^", end='')
         print("~"*(right-left-1), end='')
@@ -163,10 +163,10 @@ class ParseFailure:
 
 def _parse_operators(seq, min_precedence):
     """
-    Returns a token or ParseTree.
+    Returns a token, ParseTree, ParseFailure, or None.
     """
     if len(seq) == 0:
-        raise Exception('nothing to parse')
+        return None
 
     lhs = seq[0]
     index = 1
@@ -174,6 +174,8 @@ def _parse_operators(seq, min_precedence):
         if lhs.value in prefix_ops:
             precedence, name = prefix_ops[lhs.value]
             rhs_parse = _parse_operators(seq[index:], precedence)
+            if rhs_parse is None:
+                return ParseFailure('unary operator missing argument', lhs)
             if isinstance(rhs_parse, ParseFailure):
                 return rhs_parse
             rhs, num_tokens = rhs_parse
@@ -211,6 +213,8 @@ def _parse_operators(seq, min_precedence):
                 break
 
         rhs_parse = _parse_operators(seq[index:], precedence + (0 if rassoc else 1))
+        if rhs_parse is None:
+            raise AssertionError()
         if isinstance(rhs_parse, ParseFailure):
             return rhs_parse
         rhs, num_tokens = rhs_parse
@@ -223,6 +227,8 @@ def _parse_operators(seq, min_precedence):
 
 def parse_operators(seq):
     parse = _parse_operators(seq, 0)
+    if parse is None:
+        raise AssertionError()
     if isinstance(parse, ParseFailure):
         return parse
     return parse[0]
